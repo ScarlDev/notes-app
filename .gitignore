@@ -1,0 +1,22 @@
+# Archivos del sistema operativo
+.DS_Store
+Thumbs.db
+
+# IDEs y editores
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Brain/artifacts de Antigravity (no necesarios en el repo público)
+.gemini/
+
+# Archivos temporales
+*.log
+*.tmp
+
+# Certificados y claves (si llegaras a tener)
+*.pem
+*.key
+*.cert

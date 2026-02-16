@@ -1,0 +1,160 @@
+INFORMACION TECNICA DEL PROYECTO - PUEDE ELIMINARSE
+
+=== ARQUITECTURA ===
+
+El proyecto sigue el patron Controller-Service con Clean Architecture:
+
+1. CONTROLLERS (src/controllers/)
+   - Solo manejan Request/Response
+   - Validan datos de entrada con Zod
+   - Llaman a los servicios
+   - No contienen logica de negocio
+
+2. SERVICES (src/services/)
+   - Contienen toda la logica de negocio
+   - Realizan las operaciones de base de datos
+   - Lanzan errores que son capturados por el middleware
+
+3. MIDDLEWARES (src/middlewares/)
+   - auth.middleware.ts: Verifica el token JWT y añade userId al request
+   - error.middleware.ts: Maneja todos los errores de forma centralizada
+
+4. ROUTES (src/routes/)
+   - Define los endpoints
+   - Aplica middlewares
+   - Conecta controladores con rutas
+
+=== FLUJO DE AUTENTICACION ===
+
+1. REGISTRO:
+   - Usuario envia email, password, name
+   - Se valida con Zod
+   - Se verifica que el email no exista
+   - Se hashea la contraseña con bcrypt (10 rounds)
+   - Se crea el usuario en la base de datos
+   - Se genera un JWT con duracion de 7 dias
+   - Se retorna usuario (sin password) y token
+
+2. LOGIN:
+   - Usuario envia email y password
+   - Se busca el usuario por email
+   - Se compara la contraseña con bcrypt.compare
+   - Si es valida, se genera un JWT
+   - Se retorna usuario (sin password) y token
+
+3. PROTECCION DE RUTAS:
+   - El cliente debe enviar: Authorization: Bearer <token>
+   - El middleware auth.middleware extrae el token
+   - Verifica el token con jwt.verify
+   - Añade userId al objeto request
+   - Los controladores usan req.userId para operaciones
+
+=== RELACION BASE DE DATOS ===
+
+User 1:N Notes
+- Un usuario puede tener muchas notas
+- Una nota pertenece a un solo usuario
+- onDelete: Cascade significa que si se elimina un usuario, se eliminan sus notas
+
+=== VALIDACION CON ZOD ===
+
+Esquemas definidos en src/utils/validation.ts:
+- registerSchema: email, password (min 6), name (min 2)
+- loginSchema: email, password (min 6)
+- createNoteSchema: title y content obligatorios
+- updateNoteSchema: title y content opcionales
+
+Si la validacion falla, Zod lanza un ZodError que es capturado por error.middleware
+
+=== MANEJO DE ERRORES ===
+
+El error.middleware.ts maneja:
+- ZodError: 400 Bad Request
+- "User already exists": 409 Conflict
+- "Invalid credentials": 401 Unauthorized
+- "Note not found": 404 Not Found
+- Otros errores: 500 Internal Server Error
+
+NO hay bloques try-catch en controladores porque next(error) pasa el error al middleware
+
+=== SEGURIDAD DE NOTAS ===
+
+Cada operacion de nota verifica:
+1. El usuario esta autenticado (middleware)
+2. La nota pertenece al usuario (en el service con findFirst where userId)
+
+Esto asegura que un usuario solo puede ver/editar/eliminar sus propias notas
+
+=== COMANDOS PRISMA ===
+
+1. Crear migracion inicial:
+   npx prisma migrate dev --name init
+
+2. Generar cliente Prisma (despues de cada cambio en schema):
+   npx prisma generate
+
+3. Ver base de datos con interfaz grafica:
+   npx prisma studio
+
+4. Resetear base de datos (CUIDADO - BORRA TODO):
+   npx prisma migrate reset
+
+=== VARIABLES DE ENTORNO ===
+
+Obligatorias:
+- DATABASE_URL: Conexion a PostgreSQL
+- JWT_SECRET: Clave secreta para firmar tokens (cambiar en produccion)
+
+Opcionales:
+- PORT: Puerto del servidor (default: 3000)
+- NODE_ENV: development o production
+
+=== TYPESCRIPT STRICT MODE ===
+
+Configurado en tsconfig.json con todas las opciones strict:
+- noImplicitAny
+- strictNullChecks
+- strictFunctionTypes
+- noUnusedLocals
+- noUnusedParameters
+
+Esto asegura maximo type safety
+
+=== ENDPOINTS COMPLETOS ===
+
+POST /api/auth/register
+Body: { "email": "test@example.com", "password": "123456", "name": "Test User" }
+Response: { "user": {...}, "token": "..." }
+
+POST /api/auth/login
+Body: { "email": "test@example.com", "password": "123456" }
+Response: { "user": {...}, "token": "..." }
+
+POST /api/notes (requiere token)
+Headers: { "Authorization": "Bearer <token>" }
+Body: { "title": "Mi nota", "content": "Contenido" }
+Response: { "id": "...", "title": "...", "content": "...", "userId": "...", ... }
+
+GET /api/notes (requiere token)
+Response: [{ "id": "...", "title": "...", ... }, ...]
+
+GET /api/notes/:id (requiere token)
+Response: { "id": "...", "title": "...", ... }
+
+PUT /api/notes/:id (requiere token)
+Body: { "title": "Nuevo titulo", "content": "Nuevo contenido" } (ambos opcionales)
+Response: { "id": "...", "title": "...", ... }
+
+DELETE /api/notes/:id (requiere token)
+Response: { "message": "Note deleted successfully" }
+
+=== CONSIDERACIONES DE PRODUCCION ===
+
+1. Cambiar JWT_SECRET a un valor aleatorio fuerte
+2. Usar variables de entorno seguras (no commitear .env)
+3. Configurar CORS apropiadamente para tu dominio
+4. Usar HTTPS
+5. Implementar rate limiting
+6. Añadir logs apropiados (Winston, Morgan)
+7. Usar PM2 o similar para manejo de procesos
+8. Configurar variables de entorno en el hosting
